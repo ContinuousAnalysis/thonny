@@ -24,6 +24,8 @@ class CustomNotebookTabRow(tk.Frame):
             padx=(0 if master.dynamic_border else 1, 0),
             pady=(0, 1),
         )
+        # define double-click behavior for empty area of tab bar
+        self.filler.bind("<Double-1>", self._on_empty_space_click, True)
         self._insertion_mark = tk.Frame(
             self,
             background=self.notebook.get_label_foreground(),
@@ -92,6 +94,10 @@ class CustomNotebookTabRow(tk.Frame):
     def hide_insertion_mark(self) -> None:
         self._insertion_mark.place_forget()
         self._insertion_index = None
+    
+    def _on_empty_space_click(self, event: tk.Event) -> None:
+        # handle double-click on empty area of tab bar
+        self.notebook.on_empty_space_click(event)
 
 
 class CustomNotebook(tk.Frame):
@@ -366,6 +372,12 @@ class CustomNotebook(tk.Frame):
     def allows_dragging_to_another_notebook(self) -> bool:
         return False
 
+    # define the hook in the generic CustomNotebook, so that it is available for all subclasses without need to define it in each of them
+    def on_empty_space_click(self, event: tk.Event) -> None:
+        """Called when user double-clicks on empty area of tab bar.
+        Subclasses can override this to implement custom behavior."""
+        pass
+    
     def destroy(self):
         self.unbind("<<ThemeChanged>>", self._on_theme_changed_binding)
         super().destroy()
