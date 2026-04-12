@@ -681,9 +681,13 @@ class BaseFileBrowser(ttk.Frame):
         return "break"
 
     def open_file(self, path):
+        if not path:
+            return 
         pass
 
     def open_path_with_system_app(self, path):
+        if not path: 
+            return
         pass
 
     def on_secondary_click(self, event):
@@ -731,12 +735,14 @@ class BaseFileBrowser(ttk.Frame):
 
         if context == "button":
             self.menu.add_command(label=tr("Refresh"), command=self.cmd_refresh_tree)
-            self.menu.add_command(
-                label=tr("Open in system file manager"),
-                command=lambda: self.open_path_with_system_app(selected_path),
-            )
 
-        else:
+            if selected_path:
+                self.menu.add_command(
+                    label=tr("Open in system file manager"),
+                    command=lambda: self.open_path_with_system_app(selected_path),
+                )
+
+        elif selected_path:
             if selected_kind == "dir":
                 self.menu.add_command(
                     label=tr("Focus into"), command=lambda: self.request_focus_into(selected_path)
@@ -803,6 +809,7 @@ class BaseFileBrowser(ttk.Frame):
         self.refresh_tree()
 
     def add_middle_menu_items(self, context):
+        selected_node_id = self.get_selected_node()
         if self.supports_new_file():
             self.menu.add_command(label=tr("New file") + "...", command=self.create_new_file)
 
@@ -810,9 +817,19 @@ class BaseFileBrowser(ttk.Frame):
             self.menu.add_command(label=tr("New directory") + "...", command=self.mkdir)
 
         if self.supports_copypaste():
-            self.menu.add_command(label=tr("Cut"), command=self.cut_files)
-            self.menu.add_command(label=tr("Copy"), command=self.copy_files)
-            target = self.get_selected_file()
+            target = self.get_active_directory() or self.current_focus
+            if selected_node_id:
+                selected_path = self.tree.set(selected_node_id, "path")
+                selected_kind = self.tree.set(selected_node_id, "kind")
+                self.menu.add_command(label=tr("Cut"), command=self.cut_files)
+                self.menu.add_command(label=tr("Copy"), command=self.copy_files)
+
+                if selected_kind == "dir":
+                    target = selected_path
+                else:
+                    parent_id = self.tree.parent(selected_node_id)
+                    target = self.tree.set(parent_id, "path")
+
             self.menu.add_command(label=tr("Paste"), command=self.paste_files)
             if (
                 target is None
@@ -821,17 +838,26 @@ class BaseFileBrowser(ttk.Frame):
             ):
                 self.menu.entryconfig(tr("Paste"), state="disabled")
 
-        if self.supports_rename():
+        if self.supports_rename() and self.get_selected_path():
             self.menu.add_command(label=tr("Rename"), command=self.rename_file)
 
-        if self.supports_trash():
-            trash_label = tr("Move to Trash")
-            self.menu.add_command(label=trash_label, command=self.move_to_trash)
-        else:
-            self.menu.add_command(label=tr("Delete"), command=self.delete)
+        if selected_node_id:
+            if self.supports_trash():
+                trash_label = tr("Move to Trash")
+                self.menu.add_command(label=trash_label, command=self.move_to_trash)
+            else:
+                self.menu.add_command(label=tr("Delete"), command=self.delete)
 
     def add_last_menu_items(self, context):
-        self.menu.add_command(label=tr("Properties"), command=self.show_properties)
+        selected_path = None
+
+        if context == "item":
+            selected_node_id = self.get_selected_node()
+            if selected_node_id:
+                selected_path = self.tree.set(selected_node_id, "path")
+            
+        if selected_path:
+            self.menu.add_command(label=tr("Properties"), command=self.show_properties)
         if context == "button":
             self.menu.add_command(label=tr("Storage space"), command=self.show_fs_info)
 
@@ -1033,7 +1059,11 @@ class BaseFileBrowser(ttk.Frame):
     def paste_files(self):
         assert self.copypaste
         target = self.get_selected_file()
-        assert target
+        if target is None:
+            target = self.get_active_directory() or self.current_focus
+        if not target:
+            return 
+        
         if os.path.isfile(target):
             target = os.path.dirname(target)
         self.copypaste.paste(target)
