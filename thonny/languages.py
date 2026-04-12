@@ -50,6 +50,7 @@ LANGUAGES_DICT = {
     "ar_AR": "[BETA] عربي",
     "ta_IN": "தமிழ் [BETA]",
     "th_TH": "ภาษาไทย [BETA]",
+    "hi_IN": "हिन्दी (Hindi)", 
 }
 
 # how many spaces to add to button caption in order to make whole text visible
