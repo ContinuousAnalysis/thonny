@@ -2850,6 +2850,23 @@ class Workbench(tk.Tk):
         return self._closing
 
     def destroy(self) -> None:
+        clipboard_text = None
+        try:
+            clipboard_text = self.clipboard_get()
+            if clipboard_text:
+                    # We bypass the os.path.exists() check for large text 
+                    # (>1000 chars) or snippets with many lines (>15). 
+                    # This prevents the IDE from hanging on exit due to excessive disk I/O.
+                    if len(clipboard_text) > 1000:
+                        pass
+                    else:
+                        lines = clipboard_text.splitlines()
+                        if len(lines) < 15: 
+                            if all(os.path.exists(line.strip()) for line in lines if line.strip()):
+                                clipboard_text = None
+        except Exception:
+            clipboard_text = None
+
         try:
             if self._event_polling_id is not None:
                 self.after_cancel(self._event_polling_id)
@@ -2864,23 +2881,6 @@ class Workbench(tk.Tk):
             if runner is not None:
                 runner.destroy_backend()
 
-            # Tk clipboard gets cleared on exit and won't end up in system clipboard
-            # https://bugs.python.org/issue1207592
-            # https://stackoverflow.com/questions/26321333/tkinter-in-python-3-4-on-windows-dont-post-internal-clipboard-data-to-the-windo
-            try:
-                clipboard_data = self.clipboard_get()
-                if len(clipboard_data) < 1000 and all(
-                    map(os.path.exists, clipboard_data.splitlines())
-                ):
-                    # Looks like the clipboard contains file name(s)
-                    # Most likely this means actual file cut/copy operation
-                    # was made outside Thonny.
-                    # Don't want to replace this with simple string data of file names.
-                    pass
-                else:
-                    copy_to_clipboard(clipboard_data)
-            except Exception:
-                pass
 
         except Exception:
             logger.exception("Error while destroying workbench")
