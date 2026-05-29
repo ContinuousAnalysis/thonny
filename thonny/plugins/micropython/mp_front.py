@@ -85,6 +85,12 @@ class MicroPythonProxy(SubprocessProxy):
         }
         return result
 
+    def _get_project_args(self):
+        return {
+            "local_project_path": get_workbench().get_local_project_path(),
+            "project_manager": get_workbench().get_option(self.backend_name + ".project_manager"),
+        }
+
     def _installer_runs_locally(self):
         return True
 
@@ -289,9 +295,6 @@ class MicroPythonProxy(SubprocessProxy):
     def needs_disconnect_button(self):
         return True
 
-    def get_typeshed_path(self) -> Optional[str]:
-        return os.path.join(os.path.dirname(__file__), "typeshed")
-
 
 class BareMetalMicroPythonProxy(MicroPythonProxy):
     def __init__(self, clean):
@@ -343,13 +346,13 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
                 self.backend_name + ".interrupt_on_connect"
             ),
             "proxy_class": self.__class__.__name__,
-            "user_stubs_location": self.get_user_stubs_location(),
         }
         if self._port == WEBREPL_PORT_VALUE:
             args["url"] = get_workbench().get_option(self.backend_name + ".webrepl_url")
             args["password"] = get_workbench().get_option(self.backend_name + ".webrepl_password")
 
         args.update(self._get_time_args())
+        args.update(self._get_project_args())
 
         cmd = [
             self._get_backend_launcher_path(),
@@ -647,6 +650,10 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
     def get_machine_id(self) -> str:
         return self._machine_id
 
+    @classmethod
+    def get_vendored_user_stubs_ids(cls) -> List[str]:
+        return ["micropython-typeshed"]
+
 
 class BareMetalMicroPythonConfigPage(TabbedBackendDetailsConfigurationPage):
     def __init__(self, master):
@@ -758,6 +765,16 @@ class BareMetalMicroPythonConfigPage(TabbedBackendDetailsConfigurationPage):
             self.options_page,
             self.backend_name + ".populate_argv",
             tr("Populate sys.argv on run"),
+        )
+
+        add_vertical_separator(self.options_page)
+
+        add_option_combobox(
+            self.options_page,
+            self.backend_name + ".project_manager",
+            tr("Project manager"),
+            ["Minny", "Belay", "-"],
+            tooltip="Minny and Belay can manage dependencies and perform deployment by the project spec",
         )
 
     def _init_advanced_page(self) -> None:
@@ -1206,7 +1223,6 @@ class LocalMicroPythonProxy(MicroPythonProxy):
                 {
                     "interpreter": self._target_executable,
                     "cwd": self.get_cwd(),
-                    "user_stubs_location": self.get_user_stubs_location(),
                 }
             ),
         ]
@@ -1300,12 +1316,17 @@ class LocalMicroPythonProxy(MicroPythonProxy):
     def can_install_packages_from_files(self) -> bool:
         return True
 
+    @classmethod
+    def get_vendored_user_stubs_ids(cls) -> List[str]:
+        return ["micropython-unix-typeshed"]
+
 
 class LocalMicroPythonConfigPage(TabbedBackendDetailsConfigurationPage):
 
     def __init__(self, master):
         super().__init__(master)
         self.executable_page = self.create_and_add_empty_page(tr("Executable"))
+        self.stubs_page = self.create_and_add_stubs_page(proxy_class=self.proxy_class)
 
         add_option_entry(
             self.executable_page, "LocalMicroPython.executable", tr("Interpreter"), width=30
@@ -1336,11 +1357,11 @@ class SshMicroPythonProxy(MicroPythonProxy):
             "host": self._host,
             "port": self._port,
             "user": self._user,
-            "user_stubs_location": self.get_user_stubs_location(),
         }
 
         args.update(self._get_time_args())
         args.update(self._get_extra_launcher_args())
+        args.update(self._get_project_args())
 
         cmd = [
             thonny.plugins.micropython.os_mp_backend.__file__,
@@ -1467,6 +1488,10 @@ class SshMicroPythonProxy(MicroPythonProxy):
 
     def get_machine_id(self) -> str:
         return self._host
+
+    @classmethod
+    def get_vendored_user_stubs_ids(cls) -> List[str]:
+        return ["micropython-unix-typeshed"]
 
 
 class SshMicroPythonConfigPage(BaseSshProxyConfigPage):
@@ -1620,4 +1645,5 @@ def add_micropython_backend(
     get_workbench().set_default(name + ".sync_time", sync_time)
     get_workbench().set_default(name + ".local_rtc", local_rtc)
     get_workbench().set_default(name + ".validate_time", validate_time)
+    get_workbench().set_default(name + ".project_manager", "-")
     get_workbench().add_backend(name, proxy_class, description, config_page, sort_key=sort_key)

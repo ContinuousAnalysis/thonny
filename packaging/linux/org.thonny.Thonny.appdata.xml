@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright 2021 Aivar Annamaa <aivar.annamaa@gmail.com> -->
+<!-- Copyright 2026 Aivar Annamaa <aivar.annamaa@gmail.com> -->
 <component type="desktop-application">
   <id>org.thonny.Thonny.desktop</id>
   <metadata_license>MIT</metadata_license>
   <project_license>MIT</project_license>
   <name>Thonny</name>
   <summary>Python IDE for beginners</summary>
-  <developer_name>Aivar Annamaa</developer_name>
 
   <description>
     <p>Thonny is a simple Python IDE with features useful for learning programming.
@@ -16,6 +15,14 @@
     and special mode for learning about references.</p>
     <p>See the homepage for more information, screenshots and a walk-through video.</p>
   </description>
+  
+  <categories>
+    <category>Development</category>
+    <category>Education</category>
+    <category>Debugger</category>
+    <category>IDE</category>
+    <category>ComputerScience</category>
+  </categories>
   
   <launchable type="desktop-id">org.thonny.Thonny.desktop</launchable>
 
@@ -37,6 +44,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="5.0.0" date="2026-04-23">
+      <description>
+        <p>
+          De-facto a bug-fix release. Major version is bumped because of different bundling.
+        </p>
+      </description>
+    </release>
+    <release version="5.0.0~b1" date="2026-04-10">
+      <description>
+        <p>
+          De-facto a bug-fix pre-release. Major version is bumped because of different bundling.
+        </p>
+      </description>
+    </release>
     <release version="4.1.7" date="2024-12-16">
       <description>
         <p>

@@ -7,8 +7,8 @@ Comment=Python IDE for beginners
 Icon=thonny
 StartupWMClass=Thonny
 Terminal=false
-Categories=ComputerScience;Debugger;Development;Education;IDE
-Keywords=programming;python
+Categories=Development;IDE
+Keywords=programming;education
 MimeType=text/x-python;
 Actions=Edit;
 

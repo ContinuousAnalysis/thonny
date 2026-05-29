@@ -320,7 +320,9 @@ def clam() -> BasicUiThemeSettings:
         },
         "TLabelframe": {"configure": {"labeloutside": True, "labelmargins": [0, 0, 0, scale(4)]}},
         "TProgressbar": {"configure": {"background": frame}},
-        "Sash": {"configure": {"sashthickness": ems_to_pixels(0.6), "gripcount": 10}},
+        "Sash": {
+            "configure": {"sashthickness": ems_to_pixels(0.6), "gripcount": 10, "gripsize": 0}
+        },
     }
 
 
@@ -635,6 +637,7 @@ def enhanced_clam() -> CompoundUiThemeSettings:
             "TScrollbar": {
                 "configure": {
                     "gripcount": 0,
+                    "gripsize": 0,
                     "arrowsize": scale(14),
                     # "arrowcolor" : "DarkGray"
                     # "width" : 99 # no effect

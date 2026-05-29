@@ -62,10 +62,10 @@ from thonny.ui_utils import (
 )
 
 PYTHON_FILES_STR = tr("Python files")
-_dialog_filetypes = [(PYTHON_FILES_STR, ".py .pyw .pyi .pyde .pyx"), (tr("all files"), ".*")]
+_dialog_filetypes = [(PYTHON_FILES_STR, ".py .pyw .pyi .pyde .pyx .pye"), (tr("all files"), ".*")]
 
 PYTHON_EXTENSIONS = {"py", "pyw", "pyi", "pyde"}
-PYTHONLIKE_EXTENSIONS = {"pyx", "pyde"}
+PYTHONLIKE_EXTENSIONS = {"pyx", "pyde", "toml"}
 DEBOUNCE_SECONDS = 0.5
 
 
@@ -802,6 +802,7 @@ class Editor(BaseEditor):
                 )
             )
         )
+        logger.info("Completed connecting %r to language server %s", self.get_uri(), ls_proxy)
         self._primed_ls_proxies.append(ls_proxy)
 
     def _consider_sending_changes_to_server(self, event=None):
@@ -1062,6 +1063,11 @@ class EditorNotebook(CustomNotebook):
         if shown_files_count == 0:
             self._cmd_new_file()
 
+    # override from parent class to define the logic for double-clicking on empty space of tab bar
+    def on_empty_space_click(self, event: tk.Event) -> None:
+        """Open new file when double-clicking on empty area of tab bar"""
+        self._cmd_new_file()
+
     def save_all_named_editors(self):
         all_saved = True
         for editor in self.get_all_editors():
@@ -1140,6 +1146,7 @@ class EditorNotebook(CustomNotebook):
             target_path = askopenfilename(
                 filetypes=_dialog_filetypes, initialdir=initialdir, parent=get_workbench()
             )
+            path_or_uri = target_path
         else:
             assert node == "remote"
             target_path = ask_backend_path(
@@ -1148,9 +1155,11 @@ class EditorNotebook(CustomNotebook):
             if not target_path:
                 return
 
+            path_or_uri = remote_path_to_uri(target_path)
+
         if target_path:
             # self.close_single_untitled_unmodified_editor()
-            self.show_file(remote_path_to_uri(target_path), propose_dialog=False)
+            self.show_file(path_or_uri, propose_dialog=False)
 
     def _control_o(self, event):
         # http://stackoverflow.com/questions/22907200/remap-default-keybinding-in-tkinter

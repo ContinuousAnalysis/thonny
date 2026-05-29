@@ -80,6 +80,7 @@ def pix():
         "TScrollbar": {
             "configure": {
                 "gripcount": 0,
+                "gripsize": 0,
                 "borderwidth": 0,
                 "padding": scale(1),
                 "relief": "solid",

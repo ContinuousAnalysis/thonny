@@ -3,15 +3,17 @@
 """Code for maintaining the background process and for running
 user programs
 
-Commands get executed via shell, this way the command line in the 
+Commands get executed via shell, this way the command line in the
 shell becomes kind of title for the execution.
 
 """
+
 import collections
 import os.path
 import queue
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -24,15 +26,7 @@ from logging import getLogger
 from threading import Thread
 from time import sleep
 from tkinter import messagebox, ttk
-from typing import (  # @UnusedImport; @UnusedImport
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union  # @UnusedImport; @UnusedImport
 
 import thonny
 from thonny import (
@@ -40,12 +34,13 @@ from thonny import (
     get_runner,
     get_shell,
     get_thonny_user_dir,
+    get_vendored_libs_dir,
     get_version,
     get_workbench,
     report_time,
 )
 from thonny.common import (
-    ALL_EXPLAINED_STATUS_CODE,
+    INTERNAL_ERROR_STATUS_CODE,
     PROCESS_ACK,
     BackendEvent,
     CommandToBackend,
@@ -713,12 +708,20 @@ class Runner:
         if self._pull_backend_messages() is False:
             return
 
-        self._polling_after_id = get_workbench().after(20, self._poll_backend_messages)
+        if self._proxy.has_next_message():
+            # Some events didn't fit into this batch. Start the next batch as soon as possible
+            self._polling_after_id = get_workbench().after_idle(self._poll_backend_messages)
+        else:
+            # take it easy
+            self._polling_after_id = get_workbench().after(
+                20, lambda: get_workbench().after_idle(self._poll_backend_messages)
+            )
 
     def _pull_backend_messages(self):
         # Don't process too many messages in single batch, allow screen updates
         # and user actions between batches.
         # Mostly relevant when backend prints a lot quickly.
+        # TODO: Should I leave new messages (caused by processing this batch) for next batch?
         msg_count = 0
         max_msg_count = 10
         while self._proxy is not None and msg_count < max_msg_count:
@@ -772,7 +775,7 @@ class Runner:
         self._send_postponed_commands()
 
     def _handle_backend_termination(self, returncode: Optional[int]) -> None:
-        if returncode is None or returncode == ALL_EXPLAINED_STATUS_CODE:
+        if returncode is None or returncode == INTERNAL_ERROR_STATUS_CODE:
             err = ""
         else:
             err = f"Process ended with exit code {returncode}."
@@ -789,7 +792,10 @@ class Runner:
 
         get_workbench().become_active_window(False)
         self.destroy_backend()
-        if self._should_restart_after_command(self._last_accepted_backend_command):
+        if (
+            self._should_restart_after_command(self._last_accepted_backend_command)
+            and returncode != INTERNAL_ERROR_STATUS_CODE
+        ):
             self.restart_backend(clean=True, automatic=True)
 
     def _should_restart_after_command(self, cmd: CommandToBackend):
@@ -824,7 +830,7 @@ class Runner:
 
         get_workbench().event_generate("BackendRestart", full=True)
 
-        self._poll_backend_messages()
+        get_workbench().after_idle(self._poll_backend_messages)
 
     def destroy_backend(self, for_restart: bool = False) -> None:
         logger.info("Destroying backend")
@@ -956,6 +962,9 @@ class BackendProxy(ABC):
         """Send input data to backend"""
 
     @abstractmethod
+    def has_next_message(self) -> bool: ...
+
+    @abstractmethod
     def fetch_next_message(self):
         """Read next message from the queue or None if queue is empty"""
 
@@ -963,6 +972,9 @@ class BackendProxy(ABC):
     def get_sys_path(self):
         "backend's sys.path"
         ...
+
+    @abstractmethod
+    def get_board_id(self): ...
 
     def get_backend_name(self):
         return type(self).backend_name
@@ -1141,11 +1153,24 @@ class BackendProxy(ABC):
         return tr("Search on PyPI")
 
     @classmethod
-    def get_user_stubs_location(cls):
-        return os.path.join(thonny.get_thonny_user_dir(), "stubs", cls.backend_name)
+    def get_vendored_user_stubs_ids(cls) -> List[str]:
+        return []
 
-    def get_typeshed_path(self) -> Optional[str]:
-        return None
+    @classmethod
+    def get_user_stubs_location(cls) -> str:
+        result_path = os.path.join(thonny.get_thonny_user_dir(), "stubs", cls.backend_name)
+        if not os.path.exists(result_path):
+            # copy default stubs to user editable location on the first request
+            os.makedirs(result_path)
+            for vendored_id in cls.get_vendored_user_stubs_ids():
+                vendored_path = os.path.join(get_vendored_libs_dir(), vendored_id)
+                for item_name in os.listdir(vendored_path):
+                    full_item_path = os.path.join(vendored_path, item_name)
+                    if os.path.isdir(full_item_path):
+                        shutil.copytree(full_item_path, os.path.join(result_path, item_name))
+                    else:
+                        shutil.copy(full_item_path, os.path.join(result_path, item_name))
+        return result_path
 
     def get_machine_id(self) -> str:
         return "localhost"
@@ -1165,6 +1190,7 @@ class SubprocessProxy(BackendProxy, ABC):
         self._proc = None
         self._response_queue = None
         self._sys_path = []
+        self._board_id: Optional[str] = None
         self._usersitepackages = None
         self._externally_managed = None
         self._reported_executable = None
@@ -1379,6 +1405,9 @@ class SubprocessProxy(BackendProxy, ABC):
     def get_sys_path(self):
         return self._sys_path
 
+    def get_board_id(self):
+        return self._board_id
+
     def destroy(self, for_restart: bool = False):
         self._close_backend()
 
@@ -1411,6 +1440,12 @@ class SubprocessProxy(BackendProxy, ABC):
             msg = parse_message(data)
             if "cwd" in msg:
                 self.cwd = msg["cwd"]
+
+            if isinstance(msg, ToplevelResponse):
+                # wait a bit in case stderr reader hasn't completed its work.
+                # (Yes, wrongly interleaved stdout and stderr are also ugly, but misplaced prompt is more)
+                sleep(0.01)
+
             message_queue.append(msg)
 
             if len(message_queue) > 10:
@@ -1485,6 +1520,14 @@ class SubprocessProxy(BackendProxy, ABC):
         if "sys_path" in msg:
             self._sys_path = msg["sys_path"]
 
+        if msg.get("board_id", None) is not None:
+            logger.info("Got board_id: %r", msg["board_id"])
+            if self._board_id != msg["board_id"]:
+                self._board_id = msg["board_id"]
+                did_change_stubs = self._check_set_board_specific_stubs(self._board_id)
+                if did_change_stubs:
+                    get_workbench().start_or_restart_language_servers()
+
         if "usersitepackages" in msg:
             self._usersitepackages = msg["usersitepackages"]
 
@@ -1505,6 +1548,49 @@ class SubprocessProxy(BackendProxy, ABC):
 
         if "logfile" in msg:
             logger.info("Back-end reported logfile: %s", msg["logfile"])
+
+    def _check_set_board_specific_stubs(self, board_id: str) -> bool:
+        user_stubs_location = self.get_user_stubs_location()
+        if user_stubs_location is None:
+            return False
+
+        logger.debug("Trying to set up board specific stubs for %r", board_id)
+
+        specific_board_path = os.path.join(
+            user_stubs_location, "board_definitions", board_id, "__init__.pyi"
+        )
+        if not os.path.exists(specific_board_path):
+            logger.debug("Board path %r does not exist", specific_board_path)
+            return False
+
+        # replace in both stdlib and in plain packages, as different language servers may use different precedences
+        did_replace = False
+        for target_path in [
+            os.path.join(user_stubs_location, "board", "__init__.pyi"),
+            os.path.join(user_stubs_location, "stdlib", "board", "__init__.pyi"),
+        ]:
+
+            if not os.path.exists(target_path):
+                continue
+
+            files_are_identical = True
+            with open(specific_board_path, "br") as f1, open(target_path, "br") as f2:
+                while True:
+                    line1 = f1.readline()
+                    line2 = f2.readline()
+                    if line1 == b"" and line2 == b"":
+                        break
+
+                    if line1 != line2:
+                        files_are_identical = False
+                        break
+
+            if not files_are_identical:
+                logger.info("Copying %r over %r", specific_board_path, target_path)
+                shutil.copy(specific_board_path, target_path)
+                did_replace = True
+
+        return did_replace
 
     def _publish_cwd(self, cwd):
         if self.uses_local_filesystem():
@@ -1533,6 +1619,12 @@ class SubprocessProxy(BackendProxy, ABC):
     def can_be_isolated(self) -> bool:
         """Says whether the backend may be launched with -s switch"""
         return True
+
+    def has_next_message(self) -> bool:
+        if self.is_terminated():
+            return False
+
+        return len(self._response_queue) > 0
 
     def fetch_next_message(self):
         if not self._response_queue or len(self._response_queue) == 0:

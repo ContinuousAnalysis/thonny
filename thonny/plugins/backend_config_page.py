@@ -114,7 +114,7 @@ class BackendConfigurationPage(ConfigurationPage):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
 
-        self._combo_variable.trace("w", self._backend_changed)
+        self._combo_variable.trace_add("write", self._backend_changed)
         self._backend_changed()
 
     def _backend_changed(self, *args):
@@ -189,6 +189,7 @@ class BaseSshProxyConfigPage(TabbedBackendDetailsConfigurationPage):
         super().__init__(master)
         self.connection_page = self.create_and_add_empty_page(tr("Connection"))
         self.options_page = self.create_and_add_empty_page(tr("Options"))
+        self.stubs_page = self.create_and_add_stubs_page(proxy_class=self.proxy_class)
         self._init_connection_page()
         self._init_options_page()
 

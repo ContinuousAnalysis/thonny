@@ -1,6 +1,6 @@
+from minny.target import PASTE_SUBMIT_MODE
 from thonny.languages import tr
 from thonny.plugins.micropython import add_micropython_backend
-from thonny.plugins.micropython.mp_common import PASTE_SUBMIT_MODE
 from thonny.plugins.simplified_micropython.simplified_mp_front import (
     SimplifiedMicroPythonConfigPage,
     SimplifiedMicroPythonProxy,
@@ -31,7 +31,7 @@ class CalliopeMiniConfigPage(SimplifiedMicroPythonConfigPage):
         )
 
 
-def load_plugin():
+def _load_plugin():
     add_micropython_backend(
         "calliope",
         CalliopeMiniProxy,

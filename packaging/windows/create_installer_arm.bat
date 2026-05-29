@@ -1,4 +1,4 @@
-@echo off
+echo off
 
 set BUILDDIR=build
 del %BUILDDIR% /Q
@@ -6,12 +6,15 @@ rmdir %BUILDDIR% /S /Q
 mkdir %BUILDDIR%
 
 @echo ............... COPYING PYTHON ...................................
-xcopy C:\Python312-arm64\* %BUILDDIR% /S /E /K>NUL
+xcopy C:\Python314-arm64\* %BUILDDIR% /S /E /K>NUL
 @echo ............... COPYING OTHER STUFF ...................................
-copy ThonnyRunner312\ARM64\Release\thonny.exe %BUILDDIR% /Y
+copy ThonnyRunner314\ARM64\Release\thonny.exe %BUILDDIR% /Y
 copy thonny_python.ini %BUILDDIR%
 
 @echo ............... INSTALLING DEPS ...................................
+
+@rem newer versions don't have Win arm wheels
+%BUILDDIR%\python -s -m pip install --no-warn-script-location --no-cache-dir -U cryptography==46.0.3
 
 %BUILDDIR%\python -s -m pip install --no-warn-script-location --no-cache-dir -U wheel setuptools
 
@@ -41,7 +44,7 @@ del "%BUILDDIR%\Scripts\*" /Q>NUL
 
 copy .\pip.bat "%BUILDDIR%\Scripts\pip.bat"
 copy .\pip.bat "%BUILDDIR%\Scripts\pip3.bat"
-copy .\pip.bat "%BUILDDIR%\Scripts\pip3.12.bat"
+copy .\pip.bat "%BUILDDIR%\Scripts\pip3.14.bat"
 
 rmdir %BUILDDIR%\lib\test /S /Q>NUL
 
@@ -74,9 +77,5 @@ copy ..\..\README.rst %BUILDDIR% /Y>NUL
 
 @echo ............... CREATING INSTALLER ..........................
 set /p VERSION=<%BUILDDIR%\Lib\site-packages\thonny\VERSION
-"C:\Program Files (x86)\Inno Setup 6\iscc" /dInstallerPrefix=thonny-py312-arm64 /dAppVer=%VERSION% /dSourceFolder=build /dSupportedArchitectures=arm64 inno_setup.iss > installer_building.log
+"C:\Program Files (x86)\Inno Setup 6\iscc" /dInstallerPrefix=thonny /dAppVer=%VERSION% /dArch=arm64 /dSupportedArchitectures="arm64" /dSourceFolder=build inno_setup.iss > installer_building.log
 
-
-
-rmdir %BUILDDIR% /S /Q
-pause

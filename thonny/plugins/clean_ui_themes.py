@@ -136,6 +136,7 @@ def clean(
         "TScrollbar": {
             "configure": {
                 "gripcount": 0,
+                "gripsize": 0,
                 "borderwidth": 0,
                 "relief": "flat",
                 "darkcolor": normal_detail,
@@ -249,6 +250,7 @@ def clean(
                 # "sliderlength" : 40,
                 # "sliderthickness" : 60,
                 "gripcount": 0,
+                "gripsize": 0,
             },
             "map": {"background": [], "troughcolor": []},
         },

@@ -1,12 +1,13 @@
-import os.path
 import sys
-from time import sleep
-from typing import List, Optional, Tuple
-
 from thonny import ui_utils
 from thonny.languages import tr
-from thonny.plugins.micropython import BareMetalMicroPythonConfigPage, BareMetalMicroPythonProxy
 from thonny.plugins.micropython.daplink_flasher import DaplinkFlashingDialog
+from thonny.plugins.micropython.mp_front import (
+    BareMetalMicroPythonProxy,
+    BareMetalMicroPythonConfigPage,
+)
+from time import sleep
+from typing import List, Optional, Tuple
 
 
 class SimplifiedMicroPythonProxy(BareMetalMicroPythonProxy):
@@ -42,8 +43,9 @@ class SimplifiedMicroPythonProxy(BareMetalMicroPythonProxy):
     def get_packages_target_dir_with_comment(self) -> Tuple[Optional[str], Optional[str]]:
         return None, tr("This device does not support packages")
 
-    def get_typeshed_path(self) -> Optional[str]:
-        return os.path.join(os.path.dirname(__file__), "typeshed")
+    @classmethod
+    def get_vendored_user_stubs_ids(cls) -> List[str]:
+        return ["micropython-simplified-typeshed"]
 
 
 class SimplifiedMicroPythonConfigPage(BareMetalMicroPythonConfigPage):

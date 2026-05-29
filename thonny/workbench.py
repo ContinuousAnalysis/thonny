@@ -99,6 +99,7 @@ from thonny.ui_utils import (
     sequence_to_accelerator,
     set_windows_titlebar_darkness,
     shift_is_pressed,
+    get_tk_version_str,
 )
 
 VIEW_LOCATION_CODES = ["nw", "w", "sw", "s", "se", "e", "ne"]
@@ -222,7 +223,7 @@ class Workbench(tk.Tk):
 
         assistance.init()
         logger.info("Creating runner")
-        self._runner = Runner()
+        thonny._runner = Runner()
         self._init_hooks()  # Plugins may register hooks, so initialized them before to load plugins.
         logger.info("Start loading plugins")
         self._load_plugins()
@@ -312,6 +313,7 @@ class Workbench(tk.Tk):
             self._editor_notebook.focus_set()
             self.event_generate("WorkbenchReady")
             self.poll_events()
+            self._check_version_alignment()
         except Exception:
             logger.exception("Exception while finalizing startup")
             self.report_exception()
@@ -428,8 +430,9 @@ class Workbench(tk.Tk):
         thonny.set_logging_level()
 
     def get_main_language_server_proxy(self) -> Optional[LanguageServerProxy]:
-        assert self._ls_proxies
-        return self._ls_proxies[0]
+        if self._ls_proxies:
+            return self._ls_proxies[0]
+        return None
 
     def get_initialized_ls_proxies(self) -> List[LanguageServerProxy]:
         return [ls_proxy for ls_proxy in self._ls_proxies if ls_proxy.is_initialized()]
@@ -449,7 +452,7 @@ class Workbench(tk.Tk):
                             inlineValue=None,
                             inlayHint=None,
                             diagnostics=None,
-                            # workspaceFolders=True, # TODO: This may require workspace/didChangeWorkspaceFolders to activate Pyright?
+                            # workspaceFolders=True, # TODO: This may require workspace/didChangeWorkspaceFolders to activate Basedpyright?
                         ),
                         textDocument=TextDocumentClientCapabilities(
                             publishDiagnostics=PublishDiagnosticsClientCapabilities(
@@ -767,8 +770,7 @@ class Workbench(tk.Tk):
     def _start_runner(self) -> None:
         try:
             self.update_idletasks()  # allow UI to complete
-            thonny._runner = self._runner
-            self._runner.start()
+            thonny._runner.start()
             self._update_toolbar()
         except Exception:
             self.report_exception("Error when initializing backend")
@@ -790,7 +792,7 @@ class Workbench(tk.Tk):
         def server_loop():
             while True:
                 logger.debug("Waiting for next client")
-                (client_socket, _) = server_socket.accept()
+                client_socket, _ = server_socket.accept()
                 try:
                     data = bytes()
                     while True:
@@ -1152,6 +1154,7 @@ class Workbench(tk.Tk):
         num_entries = 0
         added_micropython_separator = False
         for backend in sorted(self.get_backends().values(), key=lambda x: x.sort_key):
+            logger.debug(f"Getting menu entries for {backend}")
             entries = backend.proxy_class.get_switcher_entries()
 
             for conf, label, machine_id in entries:
@@ -1170,6 +1173,7 @@ class Workbench(tk.Tk):
         num_entries += 1
 
         # self._backend_conf_variable.set(value=self.get_option("run.backend_name"))
+        logger.debug("Completed listing backend entries")
 
         self._backend_menu.add_separator()
 
@@ -1485,6 +1489,9 @@ class Workbench(tk.Tk):
                 toolbar_group,
             )
 
+    def set_status_message(self, text: str) -> None:
+        self._status_label.configure(text=text)
+
     def add_view(
         self,
         cls: Type[tk.Widget],
@@ -1585,7 +1592,7 @@ class Workbench(tk.Tk):
 
         self.set_default(f"{name}.last_configurations", [])
 
-        # assing names to related classes
+        # assign names to related classes
         proxy_class.backend_name = name  # type: ignore
         proxy_class.backend_description = description  # type: ignore
         config_page_constructor.backend_name = name
@@ -2374,7 +2381,11 @@ class Workbench(tk.Tk):
         else:
             self._scaling_factor = float(scaling)
 
-        MAC_SCALING_MODIFIER = 1.7
+        if get_tk_version_str().startswith("8."):
+            MAC_SCALING_MODIFIER = 1.7
+        else:
+            MAC_SCALING_MODIFIER = 1.0
+
         if running_on_mac_os():
             self._scaling_factor *= MAC_SCALING_MODIFIER
 
@@ -2871,6 +2882,7 @@ class Workbench(tk.Tk):
                     # Don't want to replace this with simple string data of file names.
                     pass
                 else:
+                    logger.info("Exporting clipboard")
                     copy_to_clipboard(clipboard_data)
             except Exception:
                 pass
@@ -2896,20 +2908,29 @@ class Workbench(tk.Tk):
             logger.info("Got KeyboardInterrupt, closing")
             self._on_close()
             return
-        self.report_exception()
+        self.report_exception(title="Internal Tk error")
 
     def report_exception(self, title: str = "Internal error") -> None:
         logger.exception(title)
         if tk._default_root and not self._closing:  # type: ignore
-            (typ, value, _) = sys.exc_info()
+            typ, value, _ = sys.exc_info()
             assert typ is not None
             if issubclass(typ, UserError):
                 msg = str(value)
+                status_prefix = ""
             else:
-                msg = traceback.format_exc()
+                msg = f"{str(value) or type(value)}\nSee frontend.log for more details"
+                status_prefix = "INTERNAL ERROR: "
 
-            dlg = ui_utils.LongTextDialog(title, msg, parent=self)
-            ui_utils.show_dialog(dlg, self)
+            try:
+                self.set_status_message(status_prefix + msg)
+                messagebox.showerror(
+                    title,
+                    msg,
+                    parent=tk._default_root,
+                )
+            except Exception:
+                logger.exception("Could not show internal error")
 
     def _convert_view_id(self, view_id: str):
         if view_id == "GlobalsView":
@@ -2980,10 +3001,12 @@ class Workbench(tk.Tk):
 
         profile = self.get_profile()
         if profile != "default":
-            title_text += f"〈 {profile} 〉"
+            title_text += f" 〈 {profile} 〉 "
+        else:
+            title_text += "  -  "
 
         if editor is not None:
-            title_text += "  -  " + editor.get_long_description()
+            title_text += editor.get_long_description().replace(os.path.expanduser("~"), "~")
 
         self.title(title_text)
 
@@ -3156,6 +3179,19 @@ class Workbench(tk.Tk):
             self.set_option("run.backend_name", "LocalCPython")
             self.set_option("LocalCPython.executable", created_exe)
             get_runner().restart_backend(False)
+
+    def _check_version_alignment(self):
+        # A smoke test and a guard against forgetting to update one of the 2 places during release
+        from importlib.metadata import version
+
+        installation_version = version("thonny")
+        embedded_version = thonny.get_version()
+        if installation_version != embedded_version:
+            messagebox.showwarning(
+                "Warning",
+                f"Thonny's installation version is reported as {installation_version!r},\n"
+                + f"but embedded version is {embedded_version!r}.",
+            )
 
 
 class WorkbenchEvent(Record):

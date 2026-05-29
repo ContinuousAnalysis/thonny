@@ -47,6 +47,7 @@ Libraries, resources and tools
 Source contributors, sponsors, advisors, translators and frequent bug-reporters
 -------------------------------------------------------------------------------
 * adzierzanowski
+* @AgrimGupta04
 * Aivar Annamaa
 * Albin
 * Alar Leemet
@@ -62,6 +63,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Andy Piper
 * Ankith
 * Antonio Carlos
+* @aquazod
 * atesin
 * athompson673
 * Augene J. Pak
@@ -74,6 +76,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Bui Huy Quang
 * borpol
 * CADTEC GmbH (cadtec.ch)
+* @cclauss
 * cefn
 * Celso Isayah Dias
 * Chad Purdy
@@ -84,13 +87,17 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * cspaier
 * cubimon
 * Curtis Wang
+* David Ostler
+* @devk-op
 * Dominic Twyman
 * Dominik George
 * Donald Butt
+* Dorothee Hornung
 * @dsb3
 * Duncan Ogilvie (@mrexodia)
 * Eliot Blennerhassett
 * Emanuel Angelo
+* @evan-william
 * Fabianus.c
 * Farshid Meidani
 * Filip Schouwenaars
@@ -129,6 +136,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * kr-g
 * Laszlo Kocsis
 * Louis Lenchant
+* Luis Miguel
 * Lrasinen
 * M Burak Kalkan
 * Marcelo de Gomensoro Malheiros
@@ -136,7 +144,9 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Marie Roald
 * Marko Ristin
 * Martin Rommel
+* @matejmatuska
 * Matt Iversen
+* Michel Coutu
 * Miro Hrončok
 * @mrexodia
 * NathanBnm
@@ -151,6 +161,8 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * phr0gger
 * @plexus
 * Pop Vasile Alexandru
+* @Pran-jal25
+* @r0zh
 * Radim
 * Ralf Michael Metzing
 * @rauferd
@@ -163,6 +175,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Saishen, Inc.
 * Sam Warmuth
 * Sami Almuhammady
+* @sampotaas-hub
 * S Jonkers
 * sailslack
 * Scott Blackledge
@@ -189,6 +202,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Tristan Bunn
 * Tusamten
 * Vytenis (svajoklis-1)
+* @WhitespaceQ
 * Xin Rong
 * YEON
 * 丁向阳 (Ding-XiangYang)

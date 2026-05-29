@@ -29,7 +29,14 @@ PLACEHOLDER_URI = f"{UNTITLED_URI_SCHEME}:0"
 
 REMOTE_PATH_MARKER = " :: "
 
-PROJECT_MARKERS = ["pyproject.toml", "setup.cfg", "setup.py", ".python-version", "Pipfile"]
+PROJECT_MARKERS = [
+    "pyproject.toml",
+    "setup.cfg",
+    "setup.py",
+    ".python-version",
+    "Pipfile",
+    "package.json",
+]
 
 
 logger = getLogger(__name__)
@@ -443,36 +450,20 @@ def copy_to_clipboard(data):
 
 
 def _copy_to_windows_clipboard(data):
-    # https://bugs.python.org/file37366/test_clipboard_win.py
-    import ctypes
+    # https://github.com/python/cpython/issues/84632#issuecomment-2379692208
+    from ctypes import windll
 
-    wcscpy = ctypes.cdll.msvcrt.wcscpy
-    OpenClipboard = ctypes.windll.user32.OpenClipboard
-    EmptyClipboard = ctypes.windll.user32.EmptyClipboard
-    SetClipboardData = ctypes.windll.user32.SetClipboardData
-    CloseClipboard = ctypes.windll.user32.CloseClipboard
-    CF_UNICODETEXT = 13
-    GlobalAlloc = ctypes.windll.kernel32.GlobalAlloc
-    GlobalLock = ctypes.windll.kernel32.GlobalLock
-    GlobalUnlock = ctypes.windll.kernel32.GlobalUnlock
-    GMEM_DDESHARE = 0x2000
-
-    OpenClipboard(None)
-    EmptyClipboard()
-    hCd = GlobalAlloc(GMEM_DDESHARE, 2 * (len(data) + 1))
-    pchData = GlobalLock(hCd)
-    wcscpy(ctypes.c_wchar_p(pchData), data)
-    GlobalUnlock(hCd)
-    SetClipboardData(CF_UNICODETEXT, hCd)
-    # ctypes.windll.user32.SetClipboardText(CF_UNICODETEXT, hCd)
-    CloseClipboard()
+    user32 = windll.user32
+    user32.OpenClipboard(0)
+    user32.GetClipboardData(1)
+    user32.CloseClipboard()
 
 
 def sizeof_fmt(num, suffix="B"):
     """Readable file size
     :param num: Bytes value
     :type num: int
-    :param suffix: Unit suffix (optionnal) default = B
+    :param suffix: Unit suffix (optional) default = B
     :type suffix: str
     :rtype: str
     """
@@ -811,15 +802,7 @@ def uri_to_long_title(uri: str) -> str:
 
 
 def local_path_to_uri(path: str) -> str:
-    if path.startswith("//"):
-        # UNC
-        return f"{FILE_URI_SCHEME}:{urllib.parse.quote(path)}"
-    elif path[1:3] == ":\\":
-        # Regular Windows path, needs special treatment on other platforms
-        return pathlib.PureWindowsPath(path).as_uri()
-    else:
-        assert path.startswith("/")
-        return f"{FILE_URI_SCHEME}://{urllib.parse.quote(path)}"
+    return pathlib.Path(path).as_uri()
 
 
 def remote_path_to_uri(path: str) -> str:

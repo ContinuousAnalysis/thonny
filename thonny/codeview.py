@@ -162,6 +162,7 @@ class CodeView(tktextext.EnhancedTextFrame):
             undo=True,
             wrap=tk.NONE,
             horizontal_scrollbar_class=ui_utils.AutoScrollbar,
+            vertical_scrollbar_rowspan=2,
             **frame_args,
         )
 
@@ -539,7 +540,6 @@ def perform_python_return(text: EnhancedText, event):
     finally:
         text.see("insert")
         text.event_generate("<<NewLine>>")
-        return "break"
 
 
 def perform_simple_return(text: EnhancedText, event):
@@ -574,7 +574,6 @@ def perform_simple_return(text: EnhancedText, event):
     finally:
         text.see("insert")
         text.event_generate("<<NewLine>>")
-        return "break"
 
 
 class BinaryFileException(RuntimeError):

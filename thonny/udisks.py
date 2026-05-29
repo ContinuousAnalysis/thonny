@@ -15,8 +15,7 @@ UDISKS2_BUS_NAME = "org.freedesktop.UDisks2"
 
 
 def list_volumes_sync() -> Sequence[str]:
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(list_volumes())
+    return asyncio.run(list_volumes())
 
 
 async def list_volumes() -> Sequence[str]:
@@ -135,7 +134,7 @@ async def list_volumes() -> Sequence[str]:
                 if "is already mounted" not in error.text:
                     raise
                 mount_points = await interface.get_mount_points()
-                # todo Double check that I don't need to account for endianess or other encoding formats here.
+                # todo Double check that I don't need to account for endianness or other encoding formats here.
                 mount_point = mount_points[0].decode("utf-8")
             discovered_mount_points.append(mount_point.rstrip("\x00"))
         except DBusError as dbus_error:

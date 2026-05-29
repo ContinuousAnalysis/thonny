@@ -157,6 +157,7 @@ def tidy(
         "TScrollbar": {
             "configure": {
                 "gripcount": 0,
+                "gripsize": 0,
                 "borderwidth": 0,
                 "padding": scale(1.15),
                 "relief": "solid",
@@ -302,6 +303,7 @@ def tidy(
                 # "sliderlength" : 40,
                 # "sliderthickness" : 60,
                 "gripcount": 0,
+                "gripsize": 0,
             },
             "map": {"background": [], "troughcolor": []},
         },
