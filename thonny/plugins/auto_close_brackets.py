@@ -1,32 +1,27 @@
 """
-2
-Auto-close brackets and quotes for Thonny's editor.
+Auto-close brackets and quotes.
 
-Typing an opening bracket or quote inserts the matching closing character and
-parks the cursor between them, with the behaviours that make this tolerable
-rather than annoying:
+Type an opening bracket or quote and the closing one gets added automatically,
+cursor in between. Off by default -- toggle is in Tools > Options > General.
 
-  * type-over   : typing ")" or a quote when the same character is already in
-                  front of the cursor steps over it instead of duplicating it
-  * pair delete : Backspace inside an empty "()" removes both characters
-  * wrap        : with a selection, typing "(" / a quote surrounds it
-  * quote-aware : quotes are not auto-closed straight after a word character
-                  (so don't, f"", b'' behave) or inside an existing string/comment
+A few things this handles beyond the basic insert:
+- typing a closing char that's already there just steps over it
+- backspace on an empty pair like () deletes both sides
+- typing an opener over a selection wraps it
+- selecting a single bracket/quote and typing a different one swaps both ends
+  (e.g. select the " in "string", type ', get 'string')
+- won't auto-close a quote right after a letter (don't stays don't) or inside
+  an existing string/comment
 
-Disabled by default so the out-of-the-box beginner experience is unchanged.
-The toggle lives in Tools => Options (see general_config_page.py).
+Note on the backspace handling: Thonny's own Backspace handler
+(perform_smart_backspace in tktextext.py) always returns "break", so a normal
+binding added after it would never fire. To get around that we put our
+handlers on a bindtag that runs before Thonny's own, instead of editing any
+core files.
 
-How the key handling works (important, and why it differs from a naive version):
-Thonny's editor (EnhancedText in tktextext.py) binds <BackSpace> to
-perform_smart_backspace, which ALWAYS returns "break". A normally-bound handler
-added afterwards would never run for Backspace. So instead of adding bindings
-to the widget's own instance tag, we prepend a private bindtag
-("AutoCloseBrackets") to each editor text widget. Tk processes bindtags in
-order, so our handlers run BEFORE perform_smart_backspace / _on_key_press / the
-default insertion. We return "break" only when we actually handle the key, and
-return None otherwise so Thonny's normal behaviour proceeds untouched.
-
-For a core contribution this file lives at: thonny/plugins/auto_close_brackets.py
+Quote-swap only matches within the same line, and skips anything that looks
+like a triple-quoted string -- those can span multiple lines and aren't
+handled here.
 """
 
 from thonny import get_workbench
@@ -34,16 +29,24 @@ from thonny import get_workbench
 OPTION_NAME = "edit.auto_close_brackets"
 BINDTAG = "AutoCloseBrackets"
 
-# opener -> closer (brackets only)
 BRACKETS = {"(": ")", "[": "]", "{": "}"}
-QUOTES = {'"', "'"}
-# any opener or quote -> its closer (used for wrapping and pair-deletion)
-PAIR = {**BRACKETS, '"': '"', "'": "'"}
 CLOSERS = set(BRACKETS.values())
+CLOSER_TO_OPENER = {v: k for k, v in BRACKETS.items()}
+QUOTES = {'"', "'"}
+PAIR = {**BRACKETS, '"': '"', "'": "'"}
+
+BRACKET_FAMILY = {
+    "(": ("(", ")"),
+    ")": ("(", ")"),
+    "[": ("[", "]"),
+    "]": ("[", "]"),
+    "{": ("{", "}"),
+    "}": ("{", "}"),
+}
 
 WORD_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 
-# Tags Thonny applies to string / comment regions (see base_syntax_themes.py).
+# tags Thonny's syntax highlighter uses for strings/comments
 STRING_OR_COMMENT_TAGS = {"string", "string3", "open_string", "open_string3", "comment"}
 
 
@@ -66,8 +69,148 @@ def _has_selection(text):
     return bool(text.tag_ranges("sel"))
 
 
+def _get_single_char_selection(text):
+    if not _has_selection(text):
+        return None
+    start = text.index("sel.first")
+    end = text.index("sel.last")
+    if text.compare(end, "==", f"{start}+1c"):
+        return start, text.get(start)
+    return None
+
+
 def _in_string_or_comment(text):
     return any(t in STRING_OR_COMMENT_TAGS for t in text.tag_names("insert-1c"))
+
+
+# --- matching logic for the swap feature ---
+
+
+def _find_matching_bracket(text, sel_start, sel_char):
+    if sel_char in BRACKETS:
+        opener, closer = sel_char, BRACKETS[sel_char]
+        depth = 1
+        idx = text.index(f"{sel_start}+1c")
+        end = text.index("end")
+        while text.compare(idx, "<", end):
+            c = text.get(idx)
+            if c == opener:
+                depth += 1
+            elif c == closer:
+                depth -= 1
+                if depth == 0:
+                    return idx
+            idx = text.index(f"{idx}+1c")
+        return None
+    elif sel_char in CLOSERS:
+        closer = sel_char
+        opener = CLOSER_TO_OPENER[closer]
+        depth = 1
+        idx = text.index(f"{sel_start}-1c")
+        start = text.index("1.0")
+        while True:
+            c = text.get(idx)
+            if c == closer:
+                depth += 1
+            elif c == opener:
+                depth -= 1
+                if depth == 0:
+                    return idx
+            if text.compare(idx, "<=", start):
+                break
+            idx = text.index(f"{idx}-1c")
+        return None
+    return None
+
+
+def _is_escaped(text, idx):
+    # odd number of backslashes right before idx, same line
+    count = 0
+    pos = idx
+    line_start = text.index(f"{idx} linestart")
+    while text.compare(pos, ">", line_start):
+        pos = text.index(f"{pos}-1c")
+        if text.get(pos) == "\\":
+            count += 1
+        else:
+            break
+    return count % 2 == 1
+
+
+def _looks_like_triple_quote(text, idx, quote_char):
+    triple = quote_char * 3
+    windows = (
+        text.get(f"{idx}-2c", f"{idx}+1c"),
+        text.get(f"{idx}-1c", f"{idx}+2c"),
+        text.get(idx, f"{idx}+3c"),
+    )
+    return triple in windows
+
+
+def _find_matching_quote(text, sel_start, quote_char):
+    if _looks_like_triple_quote(text, sel_start, quote_char):
+        return None
+
+    line_start = text.index(f"{sel_start} linestart")
+    line_end = text.index(f"{sel_start} lineend")
+
+    occurrences = []
+    idx = line_start
+    while text.compare(idx, "<", line_end):
+        if text.get(idx) == quote_char and not _is_escaped(text, idx):
+            occurrences.append(idx)
+        idx = text.index(f"{idx}+1c")
+
+    if sel_start not in occurrences or len(occurrences) < 2:
+        return None
+
+    pos = occurrences.index(sel_start)
+    if pos % 2 == 0 and pos + 1 < len(occurrences):
+        return occurrences[pos + 1]
+    if pos % 2 == 1:
+        return occurrences[pos - 1]
+    return None
+
+
+def _swap_char_at(text, index, new_char):
+    text.delete(index, f"{index}+1c")
+    text.insert(index, new_char)
+
+
+def _handle_single_char_swap(text, typed_char, sel_start, sel_char):
+    if sel_char in BRACKETS or sel_char in CLOSERS:
+        new_open, new_close = BRACKET_FAMILY.get(typed_char, (None, None))
+        if new_open is None:
+            return None
+        partner = _find_matching_bracket(text, sel_start, sel_char)
+        if partner is None:
+            return None
+        if sel_char in BRACKETS:
+            opener_index, closer_index = sel_start, partner
+        else:
+            opener_index, closer_index = partner, sel_start
+        _swap_char_at(text, opener_index, new_open)
+        _swap_char_at(text, closer_index, new_close)
+        text.tag_remove("sel", "1.0", "end")
+        text.mark_set("insert", f"{sel_start}+1c")
+        return "break"
+
+    if sel_char in QUOTES:
+        if typed_char not in QUOTES:
+            return None
+        partner = _find_matching_quote(text, sel_start, sel_char)
+        if partner is None:
+            return None
+        _swap_char_at(text, sel_start, typed_char)
+        _swap_char_at(text, partner, typed_char)
+        text.tag_remove("sel", "1.0", "end")
+        text.mark_set("insert", f"{sel_start}+1c")
+        return "break"
+
+    return None
+
+
+# --- the simpler stuff: insert pairs, type-over, wrap selections ---
 
 
 def _wrap_selection(text, opener, closer):
@@ -76,7 +219,6 @@ def _wrap_selection(text, opener, closer):
     text.edit_separator()
     text.delete(start, "sel.last")
     text.insert(start, opener + selected + closer)
-    # keep the original text selected, now sitting inside the new pair
     inner_end = "%s+%dc" % (start, len(selected) + 1)
     text.tag_remove("sel", "1.0", "end")
     text.tag_add("sel", "%s+1c" % start, inner_end)
@@ -95,14 +237,11 @@ def _handle_opener(text, opener):
 def _handle_quote(text, quote):
     if _has_selection(text):
         return _wrap_selection(text, quote, quote)
-    # step over an identical quote we likely inserted ourselves
     if _char_after(text) == quote:
         text.mark_set("insert", "insert+1c")
         return "break"
-    # right after a word char: apostrophe in a word, or a string prefix (f, r, b)
     if _char_before(text) in WORD_CHARS:
         return None
-    # avoid a stray quote inside an existing string or comment
     if _in_string_or_comment(text):
         return None
     text.insert("insert", quote + quote)
@@ -111,7 +250,6 @@ def _handle_quote(text, quote):
 
 
 def _handle_closer(text, closer):
-    # step over an existing closer instead of inserting a duplicate
     if _char_after(text) == closer:
         text.mark_set("insert", "insert+1c")
         return "break"
@@ -126,6 +264,20 @@ def _on_key(event):
     ch = event.char
     if not ch or len(ch) != 1:
         return None
+
+    is_relevant = ch in BRACKETS or ch in QUOTES or ch in CLOSERS
+    if not is_relevant:
+        return None
+
+    single = _get_single_char_selection(text)
+    if single is not None:
+        sel_start, sel_char = single
+        if sel_char in BRACKETS or sel_char in CLOSERS or sel_char in QUOTES:
+            result = _handle_single_char_swap(text, ch, sel_start, sel_char)
+            if result == "break":
+                return "break"
+            # no partner found -- fall through to normal handling, which for
+            # a 1-char selection means wrapping it instead
 
     if ch in BRACKETS:
         return _handle_opener(text, ch)
@@ -148,22 +300,17 @@ def _on_backspace(event):
         text.edit_separator()
         text.delete("insert-1c", "insert+1c")
         return "break"
-    return None  # let perform_smart_backspace handle the normal case
+    return None
 
 
 def _on_editor_text_created(event):
     text = event.text_widget
-    # Prepend our private tag so our handlers run before the editor's own
-    # instance/class bindings (and so Backspace reaches us before
-    # perform_smart_backspace, which always returns "break").
     if BINDTAG not in text.bindtags():
         text.bindtags((BINDTAG,) + text.bindtags())
 
 
 def load_plugin():
     get_workbench().set_default(OPTION_NAME, False)
-    # Class-level bindings on our private tag (registered once).
     get_workbench().bind_class(BINDTAG, "<Key>", _on_key, True)
     get_workbench().bind_class(BINDTAG, "<BackSpace>", _on_backspace, True)
-    # Attach the tag to every editor text widget as it is created.
     get_workbench().bind("EditorTextCreated", _on_editor_text_created, True)
